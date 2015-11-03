@@ -1,0 +1,21 @@
+package esvmcompiler.inter;
+
+import esvmcompiler.lexer.Token;
+import esvmcompiler.symbols.Type;
+
+/**
+ * Created by serbis on 26.10.15.
+ */
+public class Op extends Expr {
+    public Op(Token tok, Type p) {
+        super(tok, p);
+    }
+
+    public Expr reduce() {
+        Expr x = gen();
+        Temp t = new Temp(type);
+        emit(t.toString() + " = " + x.toString());
+        return t;
+    }
+
+}

@@ -1,0 +1,13 @@
+class abc {
+	float a;
+	int b;
+	b = 5;
+	b = 3;
+	a = 1;
+	a = b;
+	b = a + b;  
+	while(b == 1) {
+		a = b;
+	}
+	b = 1;
+}
