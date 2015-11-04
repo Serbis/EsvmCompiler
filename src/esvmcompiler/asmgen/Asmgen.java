@@ -542,6 +542,7 @@ public class Asmgen {
      * @return код временной переменной или -1 если их нет
      */
     private int getFreeTmpVar() {
+        freeTmpVar();
         for (int i = 0; i < tempVars.size(); i++) {
             if (!tempVars.get(i).busy) {
                 tempVars.get(i).busy = true;
@@ -553,13 +554,29 @@ public class Asmgen {
     }
 
     /**
-     * Вызывается в конце каждой tac инструкции для анализа достижимости
-     * временных переменных. Если использование какой либо временной переменной
-     * в данной инструкции было последним, она помечается как свободная
+     * Высвобождает умершие временые переменные. Вызывается после каждой tac
+     * инструкции, для проверки достижимости временных переменных и их
+     * высвобождения
      *
      */
     private void freeTmpVar() {
-
+        ArrayList<Var> exvar = new ArrayList<Var>();
+        Enumeration h = varatt.keys();
+        while (h.hasMoreElements()) { //Ищем в массиве хеше varattain переменные котые цикл жизни которых заканчился
+            Var var = (Var) h.nextElement();
+            if (var.death == tacounter) {
+                exvar.add(var);
+            }
+        }
+        h = tmpvarRelation.keys();
+        while (h.hasMoreElements()) { //Ищем найдены ранее переменные в хеше соотнашений имя/номер врем. переменной
+            Integer pos = (Integer) h.nextElement();
+            for (int i = 0; i < exvar.size(); i++) {
+                if (h.toString().equals(exvar.get(i).name)) {
+                    tempVars.get(pos).busy = false;
+                }
+            }
+        }
     }
 
     /**
