@@ -178,7 +178,7 @@ public class Parcer {
     }
 
     private Stmt assign() throws IOException {
-        Stmt stmt;
+        Stmt stmt = null;
         Token t = look;
         match(Tag.ID);
         Id id = top.get(t);
@@ -187,6 +187,9 @@ public class Parcer {
         if (look.tag == '=') {
             move();
             stmt = new Set(id, bool());
+        } else if (look.tag == '(') {
+            move();
+
         } else {
             Assess x = offset(id);
             match('=');

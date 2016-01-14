@@ -1,5 +1,7 @@
 package esvmcompiler.asmgen;
 
+import esvmcompiler.bytecodegen.Bytecodegen;
+import esvmcompiler.commands.*;
 import esvmcompiler.files.Files;
 import esvmcompiler.inter.Id;
 import esvmcompiler.lexer.*;
@@ -25,7 +27,7 @@ public class Asmgen {
     private File irf;
     private Token look;
     private int tacounter; //Текущя абслоютная позиция обрабатываемой tac инструкции
-    private int varcounter = 99; //Счетчик переменных (первые сто зарезервированы под временные)
+    private int varcounter = 9999; //Счетчик переменных (первые десять тысяч зарезервированы под временные)
     private Env env; //Экземпляр таблицы символов по исходникам
     private int tokpointer = 0; //Указатель на номер текущего токена
     private Hashtable<String, Var> varatt = new Hashtable<String, Var>(); //Hash достижимости
@@ -47,16 +49,19 @@ public class Asmgen {
     }
 
     public void generate() throws IOException{
+        Files.setOutFile(new File("/home/serbis/Projects/Outline/EsvmCompiler/" + Infos.classname + ".asm"));
         getVarsAttain(); //Составляем карту достижимости переменных
-        fillTempVarArray(100); //Создаем временные переменные
+        fillTempVarArray(10000); //Создаем временные переменные
         splitToBaseblockds(); //Размбивает поток инструкций на базовые блоки
         parceAsm(); //Парсим ассемблерный од
-        int a = 0;
-        a = 1 + 1;
+        Files.closeFile();
+
+        //Запускаем генератор байт кода
+        Bytecodegen bytecodegen = new Bytecodegen();
+        bytecodegen.generate(new File("/home/serbis/Projects/Outline/EsvmCompiler/" + Infos.classname + ".asm"));
     }
 
     public void parceAsm() throws IOException{
-        Files.setOutFile(new File("/home/serbis/Projects/Outline/EsvmCompiler/" + Infos.classname + ".asm"));
         for (int i = 0; i < baseBlocks.size(); i++) {
             for (int j = 0; j < baseBlocks.get(i).seq.size(); j++) {
                 nowin = baseBlocks.get(i).seq.get(j).seq;
@@ -72,11 +77,7 @@ public class Asmgen {
                         break;
 
                     case Tag.TMPID: //Если инедтефикатор это временная переменная
-                        int tmpn = getFreeTmpVar(); //Получаем номер свободной времянки
-                        tmpvarRelation.put(look.toString(), tmpn); //Заносим в таблицу соотношений
-
-
-                        Token toka = new Word("t" + String.valueOf(tmpn), Tag.TMPID); //И выполняем создаем подставную ВП
+                        Token toka = look; //И выполняем создаем подставную ВП
                         move();
                         match('='); //за которым идет знак присваиваня
                         assign(toka); //передаем управления в метод управления присваиваниями
@@ -91,8 +92,7 @@ public class Asmgen {
                         break;
                 }
             }
-
-
+           // freeTmpVar(); //Освобождаем умершие временные переменные
         }
         Files.closeFile();
 
@@ -124,30 +124,34 @@ public class Asmgen {
         Token op = look; //оператор
         move();
         Token tokOp2 = look; //второй операнд
+        int firstTmpVarNum = -1;
+        int secondTmpVarNum = -1;
 
         if ((tokOp1.tag == Tag.NUM || tokOp1.tag == Tag.REAL) &&
                 (tokOp2.tag == Tag.NUM || tokOp2.tag == Tag.REAL)) { //Если первый и второй опрерторы числа
             String hex1;
             String hex2;
-            varcounter++;
+            //varcounter++;
+            firstTmpVarNum = getFreeTmpVar(""); //Получаем номер свободной времянки для первого операнда
             if (tokOp1.tag == Tag.NUM) { //Если первый оператор цело
                 hex1 = convertNumToHex(tokOp1, Type.Int);
-                Db.gen(varcounter, 4, 1);   //Генерируем код - создать первую переменную
+                Db.gen(firstTmpVarNum, 4, 1);   //Генерируем код - создать первую переменную
             } else { //если дробное
                 hex1 = convertNumToHex(tokOp2, Type.Float);
-                Db.gen(varcounter, 4, 2);
+                Db.gen(firstTmpVarNum, 4, 2);
             }
-            Set.gen(varcounter, 4, hex1); //Генерируем код - определить первую переменную
-            varcounter++;
+            Set.gen(firstTmpVarNum, 4, hex1); //Генерируем код - определить первую переменную
+            //varcounter++;
+            secondTmpVarNum = getFreeTmpVar(""); //Получаем номер свободной времянки для второго операнда
             if (tokOp2.tag == Tag.NUM) { //Если второй оператор цело
                 hex2 = convertNumToHex(tokOp2, Type.Int);
-                Db.gen(varcounter, 4, 1); //Генерируем код - создать вторую переменную
+                Db.gen(secondTmpVarNum, 4, 1); //Генерируем код - создать вторую переменную
             } else { //если дробное
                 hex2 = convertNumToHex(tokOp2, Type.Float);
-                Db.gen(varcounter, 4, 2);
+                Db.gen(secondTmpVarNum, 4, 2);
             }
-            Set.gen(varcounter, 4, hex2); //Генерируем код - определить втроую переменную
-            Cmp.gen(varcounter - 1, varcounter); //Генерируем код - сравнить первую и вторую переменную
+            Set.gen(secondTmpVarNum, 4, hex2); //Генерируем код - определить втроую переменную
+            Cmp.gen(firstTmpVarNum, secondTmpVarNum); //Генерируем код - сравнить первую и вторую переменную
 
         } else if (tokOp1.tag == Tag.ID && tokOp2.tag == Tag.ID){ //или если первый и второй оператор id
             Id id1 = env.getByLexeme(tokOp1.toString()); //ищем номер первой переменной
@@ -156,33 +160,35 @@ public class Asmgen {
         } else if ((tokOp1.tag == Tag.NUM || tokOp1.tag == Tag.REAL) && tokOp2.tag == Tag.ID) { //или если первый оператор число а второй id
             Id id2 = env.getByLexeme(tokOp2.toString()); //ищем номер второй переменной
             String hex;
-            varcounter++;
+            //varcounter++;
+            firstTmpVarNum = getFreeTmpVar(""); //Получаем номер свободной времянки для первого операнда
             if (tokOp1.tag == Tag.NUM) {
                 hex = convertNumToHex(tokOp1, Type.Int);
-                Db.gen(varcounter, 4, 1);
+                Db.gen(firstTmpVarNum, 4, 1);
             } else {
                 hex = convertNumToHex(tokOp1, Type.Float);
-                Db.gen(varcounter, 4, 2);
+                Db.gen(firstTmpVarNum, 4, 2);
             }
-            Set.gen(varcounter, 4, hex); //Генерируем код - определить переменную
-            Cmp.gen(varcounter, id2.asmnum);
+            Set.gen(firstTmpVarNum, 4, hex); //Генерируем код - определить переменную
+            Cmp.gen(firstTmpVarNum, id2.asmnum);
         } else if (tokOp1.tag == Tag.ID && (tokOp2.tag == Tag.NUM || tokOp2.tag == Tag.REAL)) { //или если первый оператор id а второй число
             Id id1 = env.getByLexeme(tokOp1.toString()); //ищем номер второй переменной
             String hex;
-            varcounter++;
+            //varcounter++;
+            secondTmpVarNum = getFreeTmpVar(""); //Получаем номер свободной времянки для второго операнда
             if (tokOp2.tag == Tag.NUM) {
                 hex = convertNumToHex(tokOp2, Type.Int);
-                Db.gen(varcounter, 4, 1);
+                Db.gen(secondTmpVarNum, 4, 1);
             } else {
                 hex = convertNumToHex(tokOp2, Type.Float);
-                Db.gen(varcounter, 4, 2);
+                Db.gen(secondTmpVarNum, 4, 2);
             }
-            Set.gen(varcounter, 4, hex); //Генерируем код - определить переменную
-            Cmp.gen(id1.asmnum, varcounter);
+            Set.gen(secondTmpVarNum, 4, hex); //Генерируем код - определить переменную
+            Cmp.gen(id1.asmnum, secondTmpVarNum);
         }
         move();
         match(Tag.GOTO);
-        int offset = calcGoto(tacounter, Instruction.count + 1, look.toString());
+        int offset = calcGoto(tacounter, Instruction.count + 1, look.toString()); //Герерация переда
         if (op.toString().equals("==")) {
             Je.gen(offset);
         } else  if (op.toString().equals("!=")) {
@@ -196,6 +202,11 @@ public class Asmgen {
         } else  if (op.toString().equals("<=")) {
             Jle.gen(offset);
         }
+
+        if (firstTmpVarNum != -1) //Освобождаем временные переменные задействованные в сравнении
+            tempVars.get(firstTmpVarNum).busy = false;
+        if (secondTmpVarNum != -1)
+            tempVars.get(secondTmpVarNum).busy = false;
     }
 
     /**
@@ -216,8 +227,16 @@ public class Asmgen {
                 } else if (tok.tag == Tag.ID){ //если присваевается id
                     assignId(nametok, tok);
                 } else { //если присваевается веменная переменная
-                    assignTmpId(nametok, tok);
+                    //Оставлено как заглушка, так как высказано предположение, что данная ситуация в теории невозможна
                 }
+            }
+        } else if (look.tag == Tag.TMPID) { //или если после = идет временная переменная
+            Token tok = look; //запоминаем тэг
+            move(); //пробуем пройти на токен вперед
+            if (look != null) { //и если он есть, то значит присваеивается выражение
+                assignExpr(nametok, tok);
+            } else { //если токена нет, то тогда это одирное присвоение
+                //Оставлено как заглушка, так как высказано предположение, что данная ситуация в теории невозможна
             }
         }
     }
@@ -265,19 +284,6 @@ public class Asmgen {
         }
     }
 
-    private void assignTmpId(Token nametok, Token tok) {
-        Id idl = env.getByLexeme(nametok.toString()); //ищет левую переменную в ТС
-        Id idr = env.getByLexeme(tok.toString()); //ищет правую переменную в ТС
-        if (idr != null) { //и если она там есть
-            if (idl.asmnum == -1) {
-                varcounter++; //тут нужно вместо varc подставить номер временной переменной
-                Db.gen(varcounter, idl.type.width, idl.type.code); //создаем новую переменную
-                env.setByLexeme(nametok.toString(), varcounter); //присваеваем номер
-            }
-            Pushv.gen(idl.asmnum);
-            Pop.gen(idr.asmnum);
-        }
-    }
 
     /**
      * Гененрирует ассмблерной код при присваевании выражения
@@ -288,12 +294,19 @@ public class Asmgen {
         Token op = look; //оператор
         move();
         Token tokOp2 = look; //второй операнд
+        Type op1Type = null; //тип данных первого операнда
+        Type op2Type = null; //тип второго первого операнда
 
         if (tokOp1.tag == Tag.NUM || tokOp1.tag == Tag.REAL) { //Если первый оператор число
             pushNumOrFloat(tokOp1);
+            if (tokOp1.tag == Tag.NUM)  //запомниаем тип данных первого операнда
+                op1Type = Type.Int;
+            else
+                op1Type = Type.Float;
         } else if (tokOp1.tag == Tag.ID){ //или если первый оператор id
             Id id = env.getByLexeme(tokOp1.toString()); //ищем номер переменной
             Pushv.gen(id.asmnum);
+            op1Type = id.type;  //запомниаем тип данных первого операнда
         } else { //или если первый оператор временная переменная
             Enumeration enumeration = tmpvarRelation.keys(); //Ищем какой номер временной переменной в соотношении
             String key;
@@ -307,9 +320,14 @@ public class Asmgen {
         }
         if (tokOp2.tag == Tag.NUM || tokOp2.tag == Tag.REAL) { //Если второй оператор число
             pushNumOrFloat(tokOp2);
+            if (tokOp1.tag == Tag.NUM)  //запомниаем тип данных второго операнда
+                op2Type = Type.Int;
+            else
+                op1Type = Type.Float;
         } else if (tokOp1.tag == Tag.ID){ //или если второй оператор id
             Id id = env.getByLexeme(tokOp2.toString()); //ищем номер переменной
             Pushv.gen(id.asmnum);
+            op2Type = id.type;  //запомниаем тип данных первого операнда
         } else { //или если второй оператор временная переменная
             Enumeration enumeration = tmpvarRelation.keys(); //Ищем какой номер временной переменной в соотношении
             String key;
@@ -333,12 +351,23 @@ public class Asmgen {
         }
 
         Id id = env.getByLexeme(nametok.toString()); //ищет левую переменную в ТС
-        if (id.asmnum == -1) {
-            varcounter++; //тут
-            Db.gen(varcounter, id.type.width, id.type.code); //создаем новую переменную
-            env.setByLexeme(nametok.toString(), varcounter); //присваеваем номер
+        if (id != null) {
+            if (id.asmnum == -1) {
+                varcounter++; //тут
+                Db.gen(varcounter, id.type.width, id.type.code); //создаем новую переменную
+                env.setByLexeme(nametok.toString(), varcounter); //присваеваем номер
+            }
+            Pop.gen(id.asmnum); //извлеваем результат оперции из стека в переменную
+        } else { //Если id=null значит это продукция tac, или иначе говоря временная переменная
+            int tmpn = getFreeTmpVar(nametok.toString()); //Получаем номер свободной времянки
+            tmpvarRelation.put(nametok.toString(), tmpn); //Заносим в таблицу соотношений
+            if (op1Type == Type.Float || op2Type == Type.Float) //Если хоть один операнд float
+                Db.gen(tmpn, Type.Float.width, Type.Float.code); //создаем новую переменную c тип float
+            else //Иначе это целое число
+                Db.gen(tmpn, Type.Int.width, Type.Int.code); //создаем новую переменную c тип float
+            Pop.gen(tmpn); //извлеваем результат оперции из стека во временную переменную
         }
-        Pop.gen(id.asmnum);
+
     }
 
     /**
@@ -391,7 +420,7 @@ public class Asmgen {
         for (int i = 0; i < toklines.size(); i++) {
             for (int j = 0; j < toklines.get(i).size(); j++) {
                 Token tok = toklines.get(i).get(j);
-                if (tok.tag == Tag.ID) {
+                if (tok.tag == Tag.ID || tok.tag == Tag.TMPID) {
                     Var v = (Var) varatt.get(tok.toString());
                     if (v != null) {
                         varatt.get(tok.toString()).death = i;
@@ -541,11 +570,12 @@ public class Asmgen {
      *
      * @return код временной переменной или -1 если их нет
      */
-    private int getFreeTmpVar() {
-        freeTmpVar();
+    private int getFreeTmpVar(String name) {
+        freeTmpVars();
         for (int i = 0; i < tempVars.size(); i++) {
             if (!tempVars.get(i).busy) {
                 tempVars.get(i).busy = true;
+                tempVars.get(i).name = name;
                 return i;
             }
         }
@@ -559,21 +589,29 @@ public class Asmgen {
      * высвобождения
      *
      */
-    private void freeTmpVar() {
+    private void freeTmpVars() {
         ArrayList<Var> exvar = new ArrayList<Var>();
-        Enumeration h = varatt.keys();
+        Enumeration h = varatt.elements();
         while (h.hasMoreElements()) { //Ищем в массиве хеше varattain переменные котые цикл жизни которых заканчился
             Var var = (Var) h.nextElement();
-            if (var.death == tacounter) {
+            if (var.death < tacounter && !var.destroy) {
                 exvar.add(var);
+                var.destroy = true;
             }
         }
-        h = tmpvarRelation.keys();
-        while (h.hasMoreElements()) { //Ищем найдены ранее переменные в хеше соотнашений имя/номер врем. переменной
-            Integer pos = (Integer) h.nextElement();
-            for (int i = 0; i < exvar.size(); i++) {
-                if (h.toString().equals(exvar.get(i).name)) {
-                    tempVars.get(pos).busy = false;
+        for (Var anExvar : exvar) { //Ищем в массиве временнных переменных соответвие по имени
+            for (TempVar tempVar : tempVars) {
+                if (anExvar.name.equals(tempVar.name)) { //Если оно найдено
+                    tempVar.busy = false; //помечаем переменную как свободну
+                    tempVar.name = ""; //Убираем у нее метку имени
+                    h = tmpvarRelation.keys(); //и удалем из хеша соотношений имя/машинный номер
+                    while (h.hasMoreElements()) {
+                        String name = (String) h.nextElement();
+                        if (name.equals(anExvar.name)) {
+                            tmpvarRelation.remove(name);
+                        }
+                    }
+
                 }
             }
         }

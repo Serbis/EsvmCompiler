@@ -6,6 +6,7 @@ package esvmcompiler.asmgen;
 public class TempVar {
     public int number;
     public boolean busy;
+    public String name;
 
     public TempVar() {}
 

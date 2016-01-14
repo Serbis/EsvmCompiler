@@ -31,6 +31,16 @@ public class Files {
         }
     }
 
+    public static void append(byte[] bytes) {
+        try {
+            fos.write(bytes);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void closeFile() {
         try {
             fos.close();

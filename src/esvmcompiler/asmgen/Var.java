@@ -10,6 +10,7 @@ public class Var {
     public Type type;
     public int born;
     public int death;
+    public boolean destroy = false;
 
     public Var() {}
 
@@ -29,5 +30,6 @@ public class Var {
 
     public Var (String name, int born) {
         this.born = born;
+        this.name = name;
     }
 }

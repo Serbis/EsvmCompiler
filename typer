@@ -5,7 +5,7 @@ class abc {
 	b = 3;
 	a = 1;
 	a = b;
-	b = a + b;  
+	b = (b + a) / (a + 2);  
 	while(b == 1) {
 		a = b;
 	}
